@@ -210,6 +210,17 @@ function App() {
 
   const confettiContainerRef = useRef(null);
 
+  // --- 432HZ AUDIO ENGINE STATE & REFS ---
+  const [audioPlaying, setAudioPlaying] = useState(false);
+  const [audioMode, setAudioMode] = useState('drone');
+  const [audioVolume, setAudioVolume] = useState(0.3);
+
+  const audioCtxRef = useRef(null);
+  const gainNodeRef = useRef(null);
+  const oscillatorsRef = useRef([]);
+  const lfoNodeRef = useRef(null);
+  const filterNodeRef = useRef(null);
+
   // Remove scrollProgress state to prevent React re-renders on scroll
   const canvasRef = useRef(null);
 
@@ -396,6 +407,248 @@ function App() {
       setTimeout(() => p.remove(), (duration + 0.4) * 1000);
     }
   };
+
+  // --- 432HZ AUDIO ENGINE FUNCTIONS ---
+  const startManifestingMusic = () => {
+    try {
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextClass) return;
+      
+      let ctx = audioCtxRef.current;
+      if (!ctx || ctx.state === 'closed') {
+        ctx = new AudioContextClass();
+        audioCtxRef.current = ctx;
+      }
+      
+      if (ctx.state === 'suspended') {
+        ctx.resume();
+      }
+      
+      stopManifestingMusic();
+      
+      const masterGain = ctx.createGain();
+      masterGain.gain.setValueAtTime(audioVolume, ctx.currentTime);
+      masterGain.connect(ctx.destination);
+      gainNodeRef.current = masterGain;
+      
+      const lowpassFilter = ctx.createBiquadFilter();
+      lowpassFilter.type = 'lowpass';
+      lowpassFilter.frequency.setValueAtTime(800, ctx.currentTime);
+      lowpassFilter.connect(masterGain);
+      filterNodeRef.current = lowpassFilter;
+      
+      const activeOscillators = [];
+      
+      if (audioMode === 'drone') {
+        const oscSub = ctx.createOscillator();
+        oscSub.type = 'sine';
+        oscSub.frequency.setValueAtTime(108, ctx.currentTime);
+        
+        const gainSub = ctx.createGain();
+        gainSub.gain.setValueAtTime(0.35, ctx.currentTime);
+        oscSub.connect(gainSub).connect(lowpassFilter);
+        oscSub.start();
+        activeOscillators.push(oscSub);
+        
+        const oscCore = ctx.createOscillator();
+        oscCore.type = 'triangle';
+        oscCore.frequency.setValueAtTime(432, ctx.currentTime);
+        
+        const gainCore = ctx.createGain();
+        gainCore.gain.setValueAtTime(0.25, ctx.currentTime);
+        oscCore.connect(gainCore).connect(lowpassFilter);
+        oscCore.start();
+        activeOscillators.push(oscCore);
+        
+        const oscFifth = ctx.createOscillator();
+        oscFifth.type = 'sine';
+        oscFifth.frequency.setValueAtTime(648, ctx.currentTime);
+        
+        const gainFifth = ctx.createGain();
+        gainFifth.gain.setValueAtTime(0.12, ctx.currentTime);
+        oscFifth.connect(gainFifth).connect(lowpassFilter);
+        oscFifth.start();
+        activeOscillators.push(oscFifth);
+        
+        const lfo = ctx.createOscillator();
+        lfo.frequency.setValueAtTime(0.08, ctx.currentTime);
+        
+        const lfoGain = ctx.createGain();
+        lfoGain.gain.setValueAtTime(250, ctx.currentTime);
+        
+        lfo.connect(lfoGain).connect(lowpassFilter.frequency);
+        lfo.start();
+        activeOscillators.push(lfo);
+        lfoNodeRef.current = lfo;
+        
+      } else if (audioMode === 'binaural') {
+        const oscL = ctx.createOscillator();
+        oscL.type = 'sine';
+        oscL.frequency.setValueAtTime(432, ctx.currentTime);
+        
+        const gainL = ctx.createGain();
+        gainL.gain.setValueAtTime(0.3, ctx.currentTime);
+        
+        if (ctx.createStereoPanner) {
+          const pannerL = ctx.createStereoPanner();
+          pannerL.pan.setValueAtTime(-1, ctx.currentTime);
+          oscL.connect(gainL).connect(pannerL).connect(masterGain);
+        } else {
+          oscL.connect(gainL).connect(masterGain);
+        }
+        oscL.start();
+        activeOscillators.push(oscL);
+        
+        const oscR = ctx.createOscillator();
+        oscR.type = 'sine';
+        oscR.frequency.setValueAtTime(442, ctx.currentTime);
+        
+        const gainR = ctx.createGain();
+        gainR.gain.setValueAtTime(0.3, ctx.currentTime);
+        
+        if (ctx.createStereoPanner) {
+          const pannerR = ctx.createStereoPanner();
+          pannerR.pan.setValueAtTime(1, ctx.currentTime);
+          oscR.connect(gainR).connect(pannerR).connect(masterGain);
+        } else {
+          oscR.connect(gainR).connect(masterGain);
+        }
+        oscR.start();
+        activeOscillators.push(oscR);
+        
+        const oscCenter = ctx.createOscillator();
+        oscCenter.type = 'sine';
+        oscCenter.frequency.setValueAtTime(108, ctx.currentTime);
+        
+        const gainCenter = ctx.createGain();
+        gainCenter.gain.setValueAtTime(0.2, ctx.currentTime);
+        
+        oscCenter.connect(gainCenter).connect(masterGain);
+        oscCenter.start();
+        activeOscillators.push(oscCenter);
+        
+      } else if (audioMode === 'bowls') {
+        const oscBowl1 = ctx.createOscillator();
+        oscBowl1.type = 'triangle';
+        oscBowl1.frequency.setValueAtTime(432, ctx.currentTime);
+        
+        const gainBowl1 = ctx.createGain();
+        gainBowl1.gain.setValueAtTime(0.3, ctx.currentTime);
+        oscBowl1.connect(gainBowl1).connect(lowpassFilter);
+        oscBowl1.start();
+        activeOscillators.push(oscBowl1);
+        
+        const oscBowl2 = ctx.createOscillator();
+        oscBowl2.type = 'sine';
+        oscBowl2.frequency.setValueAtTime(540, ctx.currentTime);
+        
+        const gainBowl2 = ctx.createGain();
+        gainBowl2.gain.setValueAtTime(0.18, ctx.currentTime);
+        oscBowl2.connect(gainBowl2).connect(lowpassFilter);
+        oscBowl2.start();
+        activeOscillators.push(oscBowl2);
+        
+        const oscBowl3 = ctx.createOscillator();
+        oscBowl3.type = 'sine';
+        oscBowl3.frequency.setValueAtTime(648, ctx.currentTime);
+        
+        const gainBowl3 = ctx.createGain();
+        gainBowl3.gain.setValueAtTime(0.12, ctx.currentTime);
+        oscBowl3.connect(gainBowl3).connect(lowpassFilter);
+        oscBowl3.start();
+        activeOscillators.push(oscBowl3);
+        
+        const lfoBowl = ctx.createOscillator();
+        lfoBowl.type = 'sine';
+        lfoBowl.frequency.setValueAtTime(0.15, ctx.currentTime);
+        
+        const lfoBowlGain = ctx.createGain();
+        lfoBowlGain.gain.setValueAtTime(0.08, ctx.currentTime);
+        
+        lfoBowl.connect(lfoBowlGain).connect(gainBowl1.gain);
+        lfoBowlGain.connect(gainBowl2.gain);
+        lfoBowl.start();
+        activeOscillators.push(lfoBowl);
+        lfoNodeRef.current = lfoBowl;
+      }
+      
+      oscillatorsRef.current = activeOscillators;
+      setAudioPlaying(true);
+    } catch (e) {
+      console.error("Failed to start Web Audio generator:", e);
+    }
+  };
+
+  const stopManifestingMusic = () => {
+    try {
+      if (oscillatorsRef.current && oscillatorsRef.current.length > 0) {
+        oscillatorsRef.current.forEach(osc => {
+          try {
+            osc.stop();
+            osc.disconnect();
+          } catch (err) {
+            void err;
+          }
+        });
+        oscillatorsRef.current = [];
+      }
+      if (lfoNodeRef.current) {
+        try {
+          lfoNodeRef.current.stop();
+          lfoNodeRef.current.disconnect();
+        } catch (err) {
+          void err;
+        }
+        lfoNodeRef.current = null;
+      }
+      if (filterNodeRef.current) {
+        try {
+          filterNodeRef.current.disconnect();
+        } catch (err) {
+          void err;
+        }
+        filterNodeRef.current = null;
+      }
+      if (gainNodeRef.current) {
+        try {
+          gainNodeRef.current.disconnect();
+        } catch (err) {
+          void err;
+        }
+          gainNodeRef.current = null;
+      }
+      setAudioPlaying(false);
+    } catch (e) {
+      console.error("Failed to stop Web Audio generator:", e);
+    }
+  };
+
+  const handleVolumeChange = (newVol) => {
+    setAudioVolume(newVol);
+    if (gainNodeRef.current && audioCtxRef.current) {
+      gainNodeRef.current.gain.setValueAtTime(newVol, audioCtxRef.current.currentTime);
+    }
+  };
+
+  useEffect(() => {
+    if (audioPlaying) {
+      startManifestingMusic();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [audioMode]);
+
+  useEffect(() => {
+    return () => {
+      stopManifestingMusic();
+      if (audioCtxRef.current) {
+        try {
+          audioCtxRef.current.close();
+        } catch (err) {
+          void err;
+        }
+      }
+    };
+  }, []);
 
   // --- HANDLERS ---
   const handleButtonMouseMove = (e) => {
@@ -585,6 +838,7 @@ function App() {
   const completedMilestones = activeGoal.milestones.filter(m => m.completed).length;
   const milestonePercent = totalMilestones > 0 ? Math.round((completedMilestones / totalMilestones) * 100) : 0;
 
+  return (
     <>
       {/* Scroll Line Progress Indicator */}
       <div className="scroll-line-indicator" />
@@ -1230,6 +1484,146 @@ function App() {
                     <p style={{ fontSize: '0.88rem', color: 'var(--text-secondary)' }}>
                       Focus daily on this visual desire. Complete your milestone blocks to transition into the version of yourself who has achieved it.
                     </p>
+                  </div>
+                </div>
+
+                {/* 432Hz Sound Manifestation Engine Card */}
+                <div className="base-card scroll-tilt-card" style={{ textAlign: 'left', position: 'relative', overflow: 'hidden' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                    <h3 style={{ fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <Sparkles size={20} color="var(--color-gold)" className={audioPlaying ? 'spin' : ''} /> 432Hz Focus Ambient Engine
+                    </h3>
+                    <span style={{ 
+                      fontSize: '0.7rem', 
+                      textTransform: 'uppercase', 
+                      padding: '2px 8px', 
+                      borderRadius: '10px', 
+                      backgroundColor: audioPlaying ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255,255,255,0.08)',
+                      color: audioPlaying ? 'var(--color-sage)' : 'var(--text-secondary)', 
+                      fontWeight: 700 
+                    }}>
+                      {audioPlaying ? 'Active Signal' : 'Off-Line'}
+                    </span>
+                  </div>
+
+                  <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '16px', lineHeight: 1.4 }}>
+                    432Hz is the natural frequency of harmonic resonance. Listen while working to align brain waves for focus & accelerated manifestation.
+                  </p>
+
+                  {/* Audio Visualizer Simulator */}
+                  <div style={{ 
+                    height: '60px', 
+                    backgroundColor: 'rgba(0,0,0,0.15)', 
+                    borderRadius: '12px', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'center', 
+                    gap: '3px',
+                    marginBottom: '20px',
+                    border: '1px solid var(--border-color)',
+                    position: 'relative',
+                    overflow: 'hidden'
+                  }}>
+                    {audioPlaying ? (
+                      Array.from({ length: 28 }).map((_, i) => {
+                        const delay = (i * 0.08).toFixed(2);
+                        const height = Math.floor(Math.random() * 25) + 15;
+                        return (
+                          <div 
+                            key={i} 
+                            className="audio-wave-bar"
+                            style={{
+                              width: '3px',
+                              height: `${height}px`,
+                              backgroundColor: 'var(--color-gold)',
+                              borderRadius: '2px',
+                              animation: `soundWavePulse 1.2s ease-in-out infinite alternate`,
+                              animationDelay: `${delay}s`
+                            }}
+                          />
+                        );
+                      })
+                    ) : (
+                      <span style={{ fontSize: '0.82rem', color: 'var(--text-tertiary)', fontWeight: 600 }}>
+                        Signal Stopped - Tuned to 432Hz
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Mode Selection */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '16px' }}>
+                    {[
+                      { id: 'drone', label: 'Cosmic Drone', desc: 'Warm ambient harmonic drone' },
+                      { id: 'binaural', label: 'Binaural Focus', desc: '10Hz Alpha focus beats' },
+                      { id: 'bowls', label: 'Singing Bowls', desc: 'Resonant Tibetan bowls' }
+                    ].map(mode => (
+                      <button
+                        key={mode.id}
+                        className={`btn-secondary ${audioMode === mode.id ? 'active' : ''}`}
+                        style={{ 
+                          padding: '8px 4px', 
+                          fontSize: '0.78rem', 
+                          borderColor: audioMode === mode.id ? 'var(--color-gold)' : 'var(--border-color)',
+                          backgroundColor: audioMode === mode.id ? 'rgba(255, 158, 0, 0.08)' : 'transparent',
+                          color: audioMode === mode.id ? 'var(--color-gold)' : 'var(--text-primary)',
+                          fontWeight: audioMode === mode.id ? 700 : 500
+                        }}
+                        title={mode.desc}
+                        onClick={() => setAudioMode(mode.id)}
+                      >
+                        {mode.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Controls Slider & Play Button */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                    <button
+                      onClick={() => {
+                        if (audioPlaying) {
+                          stopManifestingMusic();
+                        } else {
+                          startManifestingMusic();
+                        }
+                      }}
+                      className="btn-primary"
+                      style={{ 
+                        padding: '10px 20px', 
+                        fontSize: '0.88rem',
+                        backgroundColor: audioPlaying ? 'var(--color-green)' : 'var(--color-gold)',
+                        color: audioPlaying ? 'white' : '#1b1a18',
+                        boxShadow: audioPlaying ? '0 4px 15px rgba(16, 185, 129, 0.3)' : '0 4px 15px rgba(255, 158, 0, 0.3)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px'
+                      }}
+                      onMouseMove={handleButtonMouseMove}
+                      onMouseLeave={handleButtonMouseLeave}
+                    >
+                      {audioPlaying ? <Pause size={16} /> : <Play size={16} />}
+                      {audioPlaying ? 'Mute' : 'Play Ambient'}
+                    </button>
+
+                    <div style={{ flexGrow: 1, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <VolumeX size={16} color="var(--text-secondary)" />
+                      <input
+                        type="range"
+                        min="0"
+                        max="1"
+                        step="0.05"
+                        value={audioVolume}
+                        onChange={(e) => handleVolumeChange(parseFloat(e.target.value))}
+                        style={{
+                          flexGrow: 1,
+                          accentColor: 'var(--color-gold)',
+                          height: '4px',
+                          borderRadius: '2px',
+                          cursor: 'pointer'
+                        }}
+                        aria-label="Engine volume control slider"
+                      />
+                      <Volume2 size={16} color="var(--text-secondary)" />
+                    </div>
                   </div>
                 </div>
 
